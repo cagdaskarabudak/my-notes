@@ -1,98 +1,176 @@
-import { Image } from 'expo-image';
-import { Platform, StyleSheet } from 'react-native';
+import CategoryChip from '@/components/CategoryChip';
+import EmptyState from '@/components/EmptyState';
+import FAB from '@/components/FAB';
+import NoteCard from '@/components/NoteCard';
+import { Spacing, Typography } from '@/constants/theme';
+import { useCategories } from '@/hooks/useCategories';
+import { useNotes } from '@/hooks/useNotes';
+import { useThemeColors } from '@/hooks/useThemeColors';
+import { useFocusEffect, useRouter } from 'expo-router';
+import React, { useCallback, useState } from 'react';
+import {
+  Alert,
+  FlatList,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 
-import { HelloWave } from '@/components/hello-wave';
-import ParallaxScrollView from '@/components/parallax-scroll-view';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { Link } from 'expo-router';
+export default function NotesScreen() {
+  const colors = useThemeColors();
+  const router = useRouter();
+  const { notes, loading, loadNotes, removeNote } = useNotes();
+  const { categories, loadCategories } = useCategories();
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
 
-export default function HomeScreen() {
-  return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
-      headerImage={
-        <Image
-          source={require('@/assets/images/partial-react-logo.png')}
-          style={styles.reactLogo}
-        />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Welcome!</ThemedText>
-        <HelloWave />
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 1: Try it</ThemedText>
-        <ThemedText>
-          Edit <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> to see changes.
-          Press{' '}
-          <ThemedText type="defaultSemiBold">
-            {Platform.select({
-              ios: 'cmd + d',
-              android: 'cmd + m',
-              web: 'F12',
-            })}
-          </ThemedText>{' '}
-          to open developer tools.
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <Link href="/modal">
-          <Link.Trigger>
-            <ThemedText type="subtitle">Step 2: Explore</ThemedText>
-          </Link.Trigger>
-          <Link.Preview />
-          <Link.Menu>
-            <Link.MenuAction title="Action" icon="cube" onPress={() => alert('Action pressed')} />
-            <Link.MenuAction
-              title="Share"
-              icon="square.and.arrow.up"
-              onPress={() => alert('Share pressed')}
+  useFocusEffect(
+    useCallback(() => {
+      loadNotes();
+      loadCategories();
+    }, [loadNotes, loadCategories])
+  );
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await loadNotes();
+    await loadCategories();
+    setRefreshing(false);
+  }, [loadNotes, loadCategories]);
+
+  const filteredNotes = selectedCategory
+    ? notes.filter((n) => n.categoryId === selectedCategory)
+    : notes;
+
+  const handleDelete = (id: string, title: string) => {
+    Alert.alert(
+      'Notu Sil',
+      `"${title}" notunu silmek istediğinize emin misiniz?`,
+      [
+        { text: 'İptal', style: 'cancel' },
+        {
+          text: 'Sil',
+          style: 'destructive',
+          onPress: () => removeNote(id),
+        },
+      ]
+    );
+  };
+
+  const getCategoryForNote = (categoryId: string | null) => {
+    if (!categoryId) return null;
+    return categories.find((c) => c.id === categoryId) ?? null;
+  };
+
+  const renderHeader = () => (
+    <View>
+      {/* Stats */}
+      <View style={styles.statsRow}>
+        <Text style={[styles.statsText, { color: colors.textSecondary }]}>
+          {filteredNotes.length} not
+          {selectedCategory ? ' (filtrelenmiş)' : ''}
+        </Text>
+      </View>
+
+      {/* Category filter */}
+      {categories.length > 0 && (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.categoryScroll}
+        >
+          <CategoryChip
+            category={{ id: 'all', name: 'Tümü', color: colors.primary, icon: '📋', createdAt: '' }}
+            selected={selectedCategory === null}
+            onPress={() => setSelectedCategory(null)}
+            size="small"
+          />
+          {categories.map((cat) => (
+            <CategoryChip
+              key={cat.id}
+              category={cat}
+              selected={selectedCategory === cat.id}
+              onPress={() =>
+                setSelectedCategory(selectedCategory === cat.id ? null : cat.id)
+              }
+              size="small"
             />
-            <Link.Menu title="More" icon="ellipsis">
-              <Link.MenuAction
-                title="Delete"
-                icon="trash"
-                destructive
-                onPress={() => alert('Delete pressed')}
-              />
-            </Link.Menu>
-          </Link.Menu>
-        </Link>
+          ))}
+        </ScrollView>
+      )}
+    </View>
+  );
 
-        <ThemedText>
-          {`Tap the Explore tab to learn more about what's included in this starter app.`}
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 3: Get a fresh start</ThemedText>
-        <ThemedText>
-          {`When you're ready, run `}
-          <ThemedText type="defaultSemiBold">npm run reset-project</ThemedText> to get a fresh{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> directory. This will move the current{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> to{' '}
-          <ThemedText type="defaultSemiBold">app-example</ThemedText>.
-        </ThemedText>
-      </ThemedView>
-    </ParallaxScrollView>
+  return (
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <FlatList
+        data={filteredNotes}
+        keyExtractor={(item) => item.id}
+        renderItem={({ item }) => (
+          <NoteCard
+            note={item}
+            category={getCategoryForNote(item.categoryId)}
+            onPress={() => {
+              if (item.isPinProtected) {
+                router.push({
+                  pathname: '/pin-lock',
+                  params: { noteId: item.id, mode: 'verify' },
+                });
+              } else {
+                router.push({ pathname: '/note/[id]', params: { id: item.id } });
+              }
+            }}
+            onLongPress={() => handleDelete(item.id, item.title)}
+          />
+        )}
+        ListHeaderComponent={renderHeader}
+        ListEmptyComponent={
+          !loading ? (
+            <EmptyState
+              icon="document-text-outline"
+              title="Henüz not yok"
+              subtitle="+ butonuna tıklayarak ilk notunuzu oluşturun"
+            />
+          ) : null
+        }
+        contentContainerStyle={filteredNotes.length === 0 ? styles.emptyList : styles.list}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={colors.primary}
+          />
+        }
+      />
+
+      <FAB onPress={() => router.push('/note/editor')} />
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  titleContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
+  container: {
+    flex: 1,
   },
-  stepContainer: {
-    gap: 8,
-    marginBottom: 8,
+  statsRow: {
+    paddingHorizontal: Spacing.lg,
+    paddingTop: Spacing.sm,
+    paddingBottom: Spacing.sm,
   },
-  reactLogo: {
-    height: 178,
-    width: 290,
-    bottom: 0,
-    left: 0,
-    position: 'absolute',
+  statsText: {
+    ...Typography.footnote,
+  },
+  categoryScroll: {
+    paddingHorizontal: Spacing.lg,
+    paddingBottom: Spacing.md,
+  },
+  list: {
+    paddingTop: Spacing.sm,
+    paddingBottom: 100,
+  },
+  emptyList: {
+    flexGrow: 1,
   },
 });
